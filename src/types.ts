@@ -25,14 +25,12 @@ export interface EnvVars {
   BLOG_URL: string;
   QRZ_URL: string;
   MY_GRIDS: string;
-  GITHUB_REPO: string;
 }
 
 export type Bindings = {
   DB: D1Database;
   ADMIN_EMAIL: string;
   ADMIN_PASSWORD_HASH: string;
-  GITHUB_TOKEN: string;
   SESSION_SECRET: string;
   DOMAIN: string;
 } & EnvVars;

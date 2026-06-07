@@ -1,0 +1,7 @@
+{
+    "claudeCode.environmentVariables": [
+        { "name": "ANTHROPIC_BASE_URL", "value": "https://xxxx" }, 
+        { "name": "ANTHROPIC_AUTH_TOKEN", "value": "xxxx" }
+
+    ]
+}

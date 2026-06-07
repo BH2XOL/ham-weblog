@@ -15,7 +15,7 @@ export const styles = `
   --input-border: rgba(0,0,0,0.1);
   --btn-bg: rgba(0,0,0,0.04);
   --btn-bg-hover: rgba(0,0,0,0.08);
-  --danger: #cf222e;
+  --danger: #cf222e; --danger-soft: rgba(207,34,46,0.12);
   --success: #2da44e;
   --glow: rgba(9,105,218,0.03);
   --backdrop: none;
@@ -38,7 +38,7 @@ html[data-theme="dark"] {
   --input-border: rgba(255,255,255,0.1);
   --btn-bg: rgba(255,255,255,0.06);
   --btn-bg-hover: rgba(255,255,255,0.1);
-  --danger: #f85149;
+  --danger: #f85149; --danger-soft: rgba(248,81,73,0.18);
   --success: #3fb950;
   --glow: rgba(88,166,255,0.04);
   --backdrop: blur(16px);
@@ -201,7 +201,9 @@ html[data-theme="dark"] .mode-cw  { background: rgba(163,113,247,0.2); }
   background: var(--btn-bg); color: var(--text);
   border: 1px solid var(--card-border); border-radius: 8px; cursor: pointer;
   font-family: inherit; transition: background-color 0.25s, border-color 0.25s;
+  display: inline-flex; align-items: center; text-decoration: none;
 }
+a.page-btn:hover { background: var(--btn-bg-hover); border-color: var(--accent-border); text-decoration: none; }
 .page-btn:hover { background: var(--btn-bg-hover); border-color: var(--accent-border); }
 .page-btn:disabled { opacity: 0.35; cursor: default; }
 .page-btn:disabled:hover { background: var(--btn-bg); border-color: var(--card-border); }

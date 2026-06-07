@@ -1,11 +1,13 @@
 import { styles } from "../styles";
 import type { Bindings, BestDX, QSO } from "../types";
+import { esc, opt } from "../lib/html";
+import { getBestDX, countQsos, queryQsos, initSchema, getLastActivity } from "../lib/db";
+import { gridDistance } from "../lib/grid";
 
 export async function frontendHandler(
   request: Request,
   env: Bindings
 ): Promise<Response> {
-  const { getBestDX, countQsos, queryQsos, initSchema, getLastActivity } = await import("../lib/db");
   await initSchema(env.DB);
 
   const url = new URL(request.url);
@@ -13,15 +15,18 @@ export async function frontendHandler(
   const modeF = url.searchParams.get("mode") || undefined;
   const dateF = url.searchParams.get("date") || undefined;
   const filters = { call: callF, mode: modeF, date: dateF };
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
 
   const [total, bestDx, qsos, lastAct] = await Promise.all([
     countQsos(env.DB, filters),
     getBestDX(env.DB),
-    queryQsos(env.DB, filters),
+    queryQsos(env.DB, filters, PAGE_SIZE, (page - 1) * PAGE_SIZE),
     getLastActivity(env.DB),
   ]);
 
   const totalCnt = total?.cnt ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCnt / PAGE_SIZE));
   const lastActivity = lastAct?.last_activity || "";
 
   let bestDisplay: BestDX | null = bestDx ?? null;
@@ -31,7 +36,6 @@ export async function frontendHandler(
       const qsosWG = await env.DB.prepare(
         "SELECT call, dxcc, grid FROM qsos WHERE grid != '' ORDER BY date DESC LIMIT 200"
       ).all<Record<string, string>>();
-      const { gridDistance } = await import("../lib/grid");
       let maxDist = 0, maxCall = "", maxDxcc = "";
       for (const row of qsosWG.results) {
         for (const mg of myGrids) {
@@ -48,13 +52,14 @@ export async function frontendHandler(
   const qrzURL = env.QRZ_URL;
 
   return new Response(
-    renderPage(qsos, totalCnt, bestDisplay, callsign, blogURL, qrzURL, lastActivity, callF, modeF, dateF),
+    renderPage(qsos, totalCnt, totalPages, page, bestDisplay, callsign, blogURL, qrzURL, lastActivity, callF, modeF, dateF),
     { headers: { "Content-Type": "text/html; charset=utf-8" } }
   );
 }
 
 function renderPage(
-  qsos: QSO[], total: number, best: BestDX | null,
+  qsos: QSO[], total: number, totalPages: number, page: number,
+  best: BestDX | null,
   callsign: string, blogURL: string, qrzURL: string,
   lastActivity: string, callF?: string, modeF?: string, dateF?: string
 ): string {
@@ -69,7 +74,7 @@ function renderPage(
 
   const rows = qsos.map(q => `
     <tr>
-      <td class="callsign"><a href=" ">${esc(q.call)}</a ></td>
+      <td class="callsign"><a href="https://www.qrz.com/db/${esc(q.call)}" target="_blank" rel="noopener">${esc(q.call)}</a ></td>
       <td>${esc(q.date)}</td>
       <td>${esc(q.time)}</td>
       <td>${esc(q.freq)}</td>
@@ -154,6 +159,7 @@ function renderPage(
           <tbody>${rows}</tbody>
         </table>
       </div>
+      ${renderPagination(total, totalPages, page, callF, modeF, dateF)}
     </div>
   </main>
 
@@ -185,10 +191,14 @@ function renderPage(
 </html>`;
 }
 
-function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-function opt(label: string, value: string, selected?: string): string {
-  return `<option value="${esc(value)}"${value === selected ? " selected" : ""}>${esc(label)}</option>`;
+function renderPagination(total: number, totalPages: number, page: number, callF?: string, modeF?: string, dateF?: string): string {
+  if (totalPages <= 1) return "";
+  const qs = new URLSearchParams();
+  if (callF) qs.set("call", callF);
+  if (modeF) qs.set("mode", modeF);
+  if (dateF) qs.set("date", dateF);
+  const base = qs.size > 0 ? `?${qs.toString()}&` : "?";
+  const prev = page > 1 ? `<a href="${base}page=${page - 1}" class="page-btn">← 上一页</a>` : `<button class="page-btn" disabled>← 上一页</button>`;
+  const next = page < totalPages ? `<a href="${base}page=${page + 1}" class="page-btn">下一页 →</a>` : `<button class="page-btn" disabled>下一页 →</button>`;
+  return `<div class="pagination">${prev}<span class="page-info">第 ${page} / ${totalPages} 页 · ${total} 条</span>${next}</div>`;
 }

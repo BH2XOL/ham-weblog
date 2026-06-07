@@ -58,14 +58,17 @@ export function initSchema(db: D1Database) {
   ]);
 }
 
-export function countQsos(db: D1Database, filters?: Record<string, string>) {
+export function countQsos(db: D1Database, filters?: Record<string, string | undefined>) {
   const { sql, params } = buildFilter("SELECT COUNT(*) as cnt FROM qsos", filters);
   return db.prepare(sql).bind(...params).first<{ cnt: number }>();
 }
-export function queryQsos(db: D1Database, filters?: Record<string, string>) {
+export function queryQsos(db: D1Database, filters?: Record<string, string | undefined>, limit?: number, offset?: number) {
   const { sql, params } = buildFilter("SELECT * FROM qsos", filters);
-  const full = `${sql} ORDER BY date DESC, time DESC`;
-  return db.prepare(full).bind(...params).all<Record<string, unknown>>().then(r => r.results.map(rowToQSO));
+  let full = `${sql} ORDER BY date DESC, time DESC`;
+  if (limit != null) full += ` LIMIT ?`;
+  if (offset != null) full += ` OFFSET ?`;
+  const allParams = limit != null ? (offset != null ? [...params, limit, offset] : [...params, limit]) : params;
+  return db.prepare(full).bind(...allParams).all<Record<string, unknown>>().then(r => r.results.map(rowToQSO));
 }
 
 export function countDXCC(db: D1Database) {
@@ -77,6 +80,17 @@ export function insertQSO(db: D1Database, qso: Omit<QSO, "id" | "created_at">) {
     INSERT OR IGNORE INTO qsos (call, dxcc, date, time, freq, mode, rst_rx, rst_tx, grid, lotw, note)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(qso.call, qso.dxcc, qso.date, qso.time, qso.freq, qso.mode, qso.rst_rx, qso.rst_tx, qso.grid, qso.lotw ? 1 : 0, qso.note).run();
+}
+
+export function batchInsertQSOs(db: D1Database, qsos: Omit<QSO, "id" | "created_at">[]) {
+  if (qsos.length === 0) return Promise.resolve([]);
+  const stmts = qsos.map(q =>
+    db.prepare(`
+      INSERT OR IGNORE INTO qsos (call, dxcc, date, time, freq, mode, rst_rx, rst_tx, grid, lotw, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(q.call, q.dxcc, q.date, q.time, q.freq, q.mode, q.rst_rx, q.rst_tx, q.grid, q.lotw ? 1 : 0, q.note)
+  );
+  return db.batch(stmts);
 }
 
 export function deleteQSOs(db: D1Database, ids: number[]) {
@@ -110,9 +124,8 @@ export function setLastActivity(db: D1Database, text: string) {
 export async function exportAllADIF(db: D1Database, callsign: string): Promise<string> {
   const all = await db.prepare("SELECT * FROM qsos ORDER BY date, time").all<Record<string, unknown>>();
   const lines: string[] = [
-    `Generated for logbook`,
     "<ADIF_VER:5>3.1.4",
-    `<PROGRAMID:${4 + callsign.length}>${callsign}-LOG`,
+    `<PROGRAMID:${`${callsign}-LOG`.length}>${callsign}-LOG`,
     "<EOH>",
   ];
   for (const row of all.results) {
@@ -134,7 +147,7 @@ export async function exportAllADIF(db: D1Database, callsign: string): Promise<s
   return lines.join("\n") + "\n";
 }
 
-function buildFilter(baseSQL: string, filters?: Record<string, string>) {
+function buildFilter(baseSQL: string, filters?: Record<string, string | undefined>) {
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (filters?.call) { clauses.push("call LIKE ?"); params.push(`%${filters.call}%`); }
