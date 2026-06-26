@@ -36,8 +36,33 @@ export async function verifySession(request: Request, env: Bindings): Promise<st
 }
 
 export async function verifyPassword(env: Bindings, email: string, password: string): Promise<boolean> {
+  if (email !== env.ADMIN_EMAIL) return false;
+
+  const stored = env.ADMIN_PASSWORD_HASH;
+
+  if (stored.includes(":")) {
+    const [saltHex, iterStr, hashHex] = stored.split(":");
+    const iterations = parseInt(iterStr, 10) || 600_000;
+    const salt = hexToBytes(saltHex);
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]);
+    const derived = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt, iterations, hash: "SHA-256" }, key, 256
+    );
+    const hex = Array.from(new Uint8Array(derived)).map(b => b.toString(16).padStart(2, "0")).join("");
+    return hex === hashHex;
+  }
+
   const enc = new TextEncoder();
   const hash = await crypto.subtle.digest("SHA-256", enc.encode(password));
   const hex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
-  return email === env.ADMIN_EMAIL && hex === env.ADMIN_PASSWORD_HASH;
+  return hex === stored;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }

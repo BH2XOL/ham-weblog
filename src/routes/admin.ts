@@ -2,20 +2,40 @@ import type { Bindings } from "../types";
 import { esc } from "../lib/html";
 import { styles } from "../styles";
 import { verifySession, createSessionCookie, verifyPassword } from "../lib/auth";
+import { initSchema, countRecentLoginFailures, recordLoginAttempt } from "../lib/db";
 
 export async function adminHandler(
   request: Request,
   env: Bindings
 ): Promise<Response> {
+  await initSchema(env.DB);
+
   const url = new URL(request.url);
   const callsign = env.CALLSIGN;
+  const securityHeaders: Record<string, string> = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+  };
 
   if (url.pathname === "/admin/login" && request.method === "POST") {
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+
+    const recentFails = await countRecentLoginFailures(env.DB, ip);
+    if (recentFails >= 5) {
+      return new Response(renderLogin(callsign, "尝试次数过多，请15分钟后再试"), {
+        headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
+        status: 429,
+      });
+    }
+
     const body = (await request.json()) as { email: string; password: string };
     const ok = await verifyPassword(env, body.email || "", body.password || "");
+    await recordLoginAttempt(env.DB, ip, ok);
+
     if (!ok) {
       return new Response(renderLogin(callsign, "邮箱或密码错误"), {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
+        headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
         status: 401,
       });
     }
@@ -24,7 +44,7 @@ export async function adminHandler(
       status: 302,
       headers: {
         Location: "/admin",
-        "Set-Cookie": `${cookie}; Path=/admin; HttpOnly; SameSite=Lax`,
+        "Set-Cookie": cookie,
       },
     });
   }
@@ -32,19 +52,19 @@ export async function adminHandler(
   const login = await verifySession(request, env);
   if (!login) {
     return new Response(renderLogin(callsign), {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+      headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
     });
   }
 
   return new Response(renderAdmin(callsign), {
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
   });
 }
 
 export async function logoutHandler(): Promise<Response> {
   return new Response(null, {
     status: 302,
-    headers: { Location: "/admin", "Set-Cookie": "session=; Path=/admin; Max-Age=0" },
+    headers: { Location: "/admin", "Set-Cookie": "session=; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=0" },
   });
 }
 
@@ -218,22 +238,22 @@ function renderAdmin(callsign: string): string {
     <div class="card">
       <div class="card-title">✏️ 手动添加 QSO</div>
       <div class="form-grid">
-        <div class="form-field"><label>呼号 *</label><input type="text" id="addCall" style="text-transform:uppercase;"></div>
+        <div class="form-field"><label>呼号 *</label><input type="text" id="addCall" style="text-transform:uppercase;" maxlength="32"></div>
         <div class="form-field"><label>日期 *</label><input type="date" id="addDate" value="2026-05-21"></div>
         <div class="form-field"><label>UTC 时间 *</label><input type="time" id="addTime" value="12:00"></div>
-        <div class="form-field"><label>频率 (MHz) *</label><input type="text" id="addFreq" placeholder="14.270"></div>
+        <div class="form-field"><label>频率 (MHz) *</label><input type="text" id="addFreq" placeholder="14.270" maxlength="16"></div>
         <div class="form-field"><label>模式 *</label><select id="addMode"><option>SSB</option><option selected>FT8</option><option>CW</option><option>FT4</option></select></div>
-        <div class="form-field"><label>RST 收</label><input type="text" id="addRstR" value="59"></div>
-        <div class="form-field"><label>RST 发</label><input type="text" id="addRstS" value="59"></div>
-        <div class="form-field"><label>对方 Grid</label><input type="text" id="addGrid"></div>
-        <div class="form-field"><label>备注</label><input type="text" id="addNote"></div>
+        <div class="form-field"><label>RST 收</label><input type="text" id="addRstR" value="59" maxlength="8"></div>
+        <div class="form-field"><label>RST 发</label><input type="text" id="addRstS" value="59" maxlength="8"></div>
+        <div class="form-field"><label>对方 Grid</label><input type="text" id="addGrid" maxlength="10"></div>
+        <div class="form-field"><label>备注</label><input type="text" id="addNote" maxlength="200"></div>
       </div>
       <button class="btn btn-primary" style="margin-top:1rem;" onclick="addQSO()">添加记录</button>
     </div>
     <div class="card">
       <div class="card-title">⚙️ 首页设置</div>
       <div class="form-grid">
-        <div class="form-field"><label>最近活动</label><input type="text" id="lastAct" placeholder="WAPC 2026"></div>
+        <div class="form-field"><label>最近活动</label><input type="text" id="lastAct" placeholder="WAPC 2026" maxlength="200"></div>
       </div>
       <button class="btn btn-primary" style="margin-top:0.75rem;" onclick="saveLastAct()">保存</button>
     </div>
@@ -241,9 +261,9 @@ function renderAdmin(callsign: string): string {
       <div class="card-title">🏆 最佳 DX</div>
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">手动设置统计卡片显示的最佳 DX。</p>
       <div class="form-grid">
-        <div class="form-field"><label>呼号 *</label><input type="text" id="bestCall" style="text-transform:uppercase;"></div>
-        <div class="form-field"><label>描述</label><input type="text" id="bestDesc"></div>
-        <div class="form-field"><label>距离(km) *</label><input type="number" id="bestDist"></div>
+        <div class="form-field"><label>呼号 *</label><input type="text" id="bestCall" style="text-transform:uppercase;" maxlength="32"></div>
+        <div class="form-field"><label>描述</label><input type="text" id="bestDesc" maxlength="100"></div>
+        <div class="form-field"><label>距离(km) *</label><input type="number" id="bestDist" min="1" max="40000"></div>
       </div>
       <button class="btn btn-success" style="margin-top:0.75rem;" onclick="saveBest()">保存</button>
     </div>
@@ -273,6 +293,7 @@ function renderAdmin(callsign: string): string {
     uploadZone.addEventListener('drop',function(e){e.preventDefault();handleFile(e.dataTransfer.files[0]);});
     async function handleFile(f) {
       var file = f.files ? f.files[0] : f; if (!file) return;
+      if (file.size > 5*1024*1024) { toast('文件不能超过 5MB', true); return; }
       var text = await file.text();
       var resp = await fetch('/admin/api/upload', { method:'POST', body:text });
       var data = await resp.json();
@@ -286,6 +307,7 @@ function renderAdmin(callsign: string): string {
       var time = document.getElementById('addTime').value;
       var freq = document.getElementById('addFreq').value.trim();
       if (!call || !date || !time || !freq) { toast('呼号、日期、时间、频率为必填项', true); return; }
+      if (call.length > 32 || date.length > 10 || time.length > 5 || freq.length > 16) { toast('字段长度超出限制', true); return; }
       var body = {
         call, date, time, freq,
         mode: document.getElementById('addMode').value,
@@ -301,15 +323,17 @@ function renderAdmin(callsign: string): string {
     }
     async function saveLastAct() {
       var text = document.getElementById('lastAct').value.trim();
+      if (text.length > 200) { toast('文本不能超过 200 字符', true); return; }
       var resp = await fetch('/admin/api/lastact', { method:'POST', body:JSON.stringify({text:text}) });
       var data = await resp.json();
       toast(data.ok ? '已保存' : (data.error||'保存失败'), !data.ok);
     }
     async function saveBest() {
       var call = document.getElementById('bestCall').value.trim().toUpperCase();
-      var dist = parseInt(document.getElementById('bestDist').value);
+      var dist = parseInt(document.getElementById('bestDist').value, 10);
       if (!call || !dist) { toast('呼号和距离必填', true); return; }
-      var body = { call:call, description:document.getElementById('bestDesc').value.trim(), distance_km:dist };
+      if (dist <= 0 || dist > 40000) { toast('距离范围 1-40000 km', true); return; }
+      var body = { call:call, description:document.getElementById('bestDesc').value.trim().slice(0, 100), distance_km:dist };
       var resp = await fetch('/admin/api/bestdx', { method:'POST', body:JSON.stringify(body) });
       var data = await resp.json();
       toast(data.ok ? '最佳 DX 已更新' : (data.error||'保存失败'), !data.ok);
@@ -322,8 +346,9 @@ function renderAdmin(callsign: string): string {
     async function batchDelete() {
       var checks = document.querySelectorAll('.select-row:checked');
       if (!checks.length) { toast('请勾选记录', true); return; }
+      if (checks.length > 200) { toast('一次最多删除 200 条', true); return; }
       if (!confirm('删除选中的 '+checks.length+' 条？不可撤销。')) return;
-      var ids = Array.from(checks).map(function(c){ return parseInt(c.value); });
+      var ids = Array.from(checks).map(function(c){ return parseInt(c.value, 10); });
       await fetch('/admin/api/delete', { method:'POST', body:JSON.stringify({ids:ids}) });
       toast('已批量删除 '+ids.length+' 条'); goPage(1);
     }

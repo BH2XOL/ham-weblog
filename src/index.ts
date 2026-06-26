@@ -18,10 +18,38 @@ app.get("/admin", (c) => adminHandler(c.req.raw, c.env));
 app.post("/admin/login", (c) => adminHandler(c.req.raw, c.env));
 app.get("/admin/logout", () => logoutHandler());
 
+function verifyOrigin(c: { req: { raw: Request }; env: Bindings }): boolean {
+  const origin = c.req.raw.headers.get("Origin");
+  if (!origin) return false;
+  try {
+    const originHost = new URL(origin).hostname;
+    if (originHost === "localhost") return true;
+
+    const domain = c.env.DOMAIN || "";
+    if (domain.startsWith("localhost")) return true;
+
+    try {
+      const expectedHost = new URL(`https://${domain}`).hostname;
+      return originHost === expectedHost;
+    } catch {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
+
 const admin = new Hono<{ Bindings: Bindings }>();
 admin.use("*", async (c, next) => {
   const login = await verifySession(c.req.raw, c.env);
   if (!login) return c.json({ error: "Unauthorized" }, 401);
+
+  if (c.req.method !== "GET" && c.req.method !== "HEAD" && c.req.method !== "OPTIONS") {
+    if (!verifyOrigin(c)) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+  }
+
   await next();
 });
 admin.post("/admin/api/upload", (c) => apiUploadHandler(c.req.raw, c.env));

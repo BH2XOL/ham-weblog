@@ -16,7 +16,8 @@ export async function frontendHandler(
   const dateF = url.searchParams.get("date") || undefined;
   const filters = { call: callF, mode: modeF, date: dateF };
   const PAGE_SIZE = 50;
-  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
+  const raw = parseInt(url.searchParams.get("page") || "1", 10);
+  const page = Math.max(1, Number.isNaN(raw) ? 1 : raw);
 
   const [total, bestDx, qsos, lastAct] = await Promise.all([
     countQsos(env.DB, filters),
@@ -53,8 +54,22 @@ export async function frontendHandler(
 
   return new Response(
     renderPage(qsos, totalCnt, totalPages, page, bestDisplay, callsign, blogURL, qrzURL, lastActivity, callF, modeF, dateF),
-    { headers: { "Content-Type": "text/html; charset=utf-8" } }
+    {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+      },
+    }
   );
+}
+
+function safeURL(u: string): string {
+  if (!u) return "#";
+  const lower = u.trim().toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://")) return esc(u);
+  return "#";
 }
 
 function renderPage(
@@ -78,7 +93,7 @@ function renderPage(
       <td>${esc(q.date)}</td>
       <td>${esc(q.time)}</td>
       <td>${esc(q.freq)}</td>
-      <td><span class="mode-badge mode-${q.mode.toLowerCase()}">${esc(q.mode)}</span></td>
+      <td><span class="mode-badge mode-${esc(q.mode.toLowerCase())}">${esc(q.mode)}</span></td>
       <td>${esc(q.rst_rx)} / ${esc(q.rst_tx)}</td>
     </tr>`).join("");
 
@@ -105,10 +120,10 @@ function renderPage(
     <div class="header-inner">
       <a href="/" class="logo">${esc(callsign)}</a >
       <nav class="nav">
-        <a href="${esc(blogURL)}">博客</a >
+        <a href="${safeURL(blogURL)}">博客</a >
         <a href="#" class="active">日志</a >
         <a href="/admin">管理</a >
-        <a href="${esc(qrzURL)}">QRZ</a >
+        <a href="${safeURL(qrzURL)}">QRZ</a >
         <button class="theme-btn" id="theme-btn" aria-label="切换主题">
           <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>

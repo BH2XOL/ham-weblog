@@ -28,11 +28,11 @@ jobs:
             sed -i "s|\${D1_DATABASE_ID}|${{ secrets.D1_DATABASE_ID }}|g" wrangler.toml
           command: deploy
           postCommands: |
-            echo "${{ secrets.DOMAIN }}" | npx wrangler secret put DOMAIN
-            echo "${{ secrets.CALLSIGN }}" | npx wrangler secret put CALLSIGN
-            echo "${{ secrets.BLOG_URL }}" | npx wrangler secret put BLOG_URL
-            echo "${{ secrets.QRZ_URL }}" | npx wrangler secret put QRZ_URL
-            echo "${{ secrets.MY_GRIDS }}" | npx wrangler secret put MY_GRIDS
-            echo "${{ secrets.ADMIN_EMAIL }}" | npx wrangler secret put ADMIN_EMAIL
-            echo "${{ secrets.ADMIN_PASSWORD_HASH }}" | npx wrangler secret put ADMIN_PASSWORD_HASH
-            echo "${{ secrets.SESSION_SECRET }}" | npx wrangler secret put SESSION_SECRET
+            printf '%s' "${{ secrets.DOMAIN }}" | npx wrangler secret put DOMAIN
+            printf '%s' "${{ secrets.CALLSIGN }}" | npx wrangler secret put CALLSIGN
+            printf '%s' "${{ secrets.BLOG_URL }}" | npx wrangler secret put BLOG_URL
+            printf '%s' "${{ secrets.QRZ_URL }}" | npx wrangler secret put QRZ_URL
+            printf '%s' "${{ secrets.MY_GRIDS }}" | npx wrangler secret put MY_GRIDS
+            printf '%s' "${{ secrets.ADMIN_EMAIL }}" | npx wrangler secret put ADMIN_EMAIL
+            printf '%s' "${{ secrets.ADMIN_PASSWORD_HASH }}" | npx wrangler secret put ADMIN_PASSWORD_HASH
+            printf '%s' "${{ secrets.SESSION_SECRET }}" | npx wrangler secret put SESSION_SECRET
