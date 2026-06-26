@@ -153,7 +153,7 @@ function renderPage(
     <div class="search-bar">
       <div class="search-field" style="flex:2;min-width:150px;">
         <label>呼号</label>
-        <input type="text" placeholder="搜索呼号…" id="callSearch" value="${esc(callF || "")}">
+        <input type="text" placeholder="搜索呼号…" id="callSearch" value="${esc(callF || "")}" maxlength="10">
       </div>
       <div class="search-field" style="min-width:90px;">
         <label>模式</label>

@@ -238,7 +238,7 @@ function renderAdmin(callsign: string): string {
     <div class="card">
       <div class="card-title">✏️ 手动添加 QSO</div>
       <div class="form-grid">
-        <div class="form-field"><label>呼号 *</label><input type="text" id="addCall" style="text-transform:uppercase;" maxlength="32"></div>
+        <div class="form-field"><label>呼号 *</label><input type="text" id="addCall" style="text-transform:uppercase;" maxlength="10"></div>
         <div class="form-field"><label>日期 *</label><input type="date" id="addDate" value="2026-05-21"></div>
         <div class="form-field"><label>UTC 时间 *</label><input type="time" id="addTime" value="12:00"></div>
         <div class="form-field"><label>频率 (MHz) *</label><input type="text" id="addFreq" placeholder="14.270" maxlength="16"></div>
@@ -261,7 +261,7 @@ function renderAdmin(callsign: string): string {
       <div class="card-title">🏆 最佳 DX</div>
       <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">手动设置统计卡片显示的最佳 DX。</p>
       <div class="form-grid">
-        <div class="form-field"><label>呼号 *</label><input type="text" id="bestCall" style="text-transform:uppercase;" maxlength="32"></div>
+        <div class="form-field"><label>呼号 *</label><input type="text" id="bestCall" style="text-transform:uppercase;" maxlength="10"></div>
         <div class="form-field"><label>描述</label><input type="text" id="bestDesc" maxlength="100"></div>
         <div class="form-field"><label>距离(km) *</label><input type="number" id="bestDist" min="1" max="40000"></div>
       </div>
@@ -295,7 +295,7 @@ function renderAdmin(callsign: string): string {
       var file = f.files ? f.files[0] : f; if (!file) return;
       if (file.size > 5*1024*1024) { toast('文件不能超过 5MB', true); return; }
       var text = await file.text();
-      var resp = await fetch('/admin/api/upload', { method:'POST', body:text });
+      var resp = await fetch('/admin/api/upload', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:text });
       var data = await resp.json();
       document.getElementById('uploadResult').style.display='block';
       document.getElementById('uploadResult').textContent = '新增 '+data.inserted+' 条 · 跳过 '+data.skipped+' 条重复';
@@ -307,7 +307,7 @@ function renderAdmin(callsign: string): string {
       var time = document.getElementById('addTime').value;
       var freq = document.getElementById('addFreq').value.trim();
       if (!call || !date || !time || !freq) { toast('呼号、日期、时间、频率为必填项', true); return; }
-      if (call.length > 32 || date.length > 10 || time.length > 5 || freq.length > 16) { toast('字段长度超出限制', true); return; }
+      if (call.length > 10 || date.length > 10 || time.length > 5 || freq.length > 16) { toast('字段长度超出限制', true); return; }
       var body = {
         call, date, time, freq,
         mode: document.getElementById('addMode').value,
@@ -316,7 +316,7 @@ function renderAdmin(callsign: string): string {
         grid: document.getElementById('addGrid').value.trim(),
         note: document.getElementById('addNote').value.trim()
       };
-      var resp = await fetch('/admin/api/add', { method:'POST', body:JSON.stringify(body) });
+      var resp = await fetch('/admin/api/add', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:JSON.stringify(body) });
       var data = await resp.json();
       if (data.ok) { toast('已添加 '+call); goPage(1); }
       else toast(data.error || '添加失败', true);
@@ -324,7 +324,7 @@ function renderAdmin(callsign: string): string {
     async function saveLastAct() {
       var text = document.getElementById('lastAct').value.trim();
       if (text.length > 200) { toast('文本不能超过 200 字符', true); return; }
-      var resp = await fetch('/admin/api/lastact', { method:'POST', body:JSON.stringify({text:text}) });
+      var resp = await fetch('/admin/api/lastact', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:JSON.stringify({text:text}) });
       var data = await resp.json();
       toast(data.ok ? '已保存' : (data.error||'保存失败'), !data.ok);
     }
@@ -334,13 +334,13 @@ function renderAdmin(callsign: string): string {
       if (!call || !dist) { toast('呼号和距离必填', true); return; }
       if (dist <= 0 || dist > 40000) { toast('距离范围 1-40000 km', true); return; }
       var body = { call:call, description:document.getElementById('bestDesc').value.trim().slice(0, 100), distance_km:dist };
-      var resp = await fetch('/admin/api/bestdx', { method:'POST', body:JSON.stringify(body) });
+      var resp = await fetch('/admin/api/bestdx', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:JSON.stringify(body) });
       var data = await resp.json();
       toast(data.ok ? '最佳 DX 已更新' : (data.error||'保存失败'), !data.ok);
     }
     async function deleteOne(id) {
       if (!confirm('删除此条 QSO？不可撤销。')) return;
-      await fetch('/admin/api/delete', { method:'POST', body:JSON.stringify({ids:[id]}) });
+      await fetch('/admin/api/delete', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:JSON.stringify({ids:[id]}) });
       toast('已删除'); goPage(1);
     }
     async function batchDelete() {
@@ -349,7 +349,7 @@ function renderAdmin(callsign: string): string {
       if (checks.length > 200) { toast('一次最多删除 200 条', true); return; }
       if (!confirm('删除选中的 '+checks.length+' 条？不可撤销。')) return;
       var ids = Array.from(checks).map(function(c){ return parseInt(c.value, 10); });
-      await fetch('/admin/api/delete', { method:'POST', body:JSON.stringify({ids:ids}) });
+      await fetch('/admin/api/delete', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:JSON.stringify({ids:ids}) });
       toast('已批量删除 '+ids.length+' 条'); goPage(1);
     }
     function toggleAll() {

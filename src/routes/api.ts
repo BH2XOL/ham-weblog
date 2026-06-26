@@ -5,7 +5,7 @@ import { parseADIF, mergeUnique } from "../lib/adif";
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_DELETE_IDS = 200;
 const MAX_FIELD_LEN: Record<string, number> = {
-  call: 32, date: 10, time: 5, freq: 16, mode: 8,
+  call: 10, date: 10, time: 5, freq: 16, mode: 8,
   rst_rx: 8, rst_tx: 8, grid: 10, note: 200,
 };
 const ALLOWED_MODES = new Set(["SSB", "CW", "FT8", "FT4", "AM", "FM", "RTTY", "PSK31"]);
