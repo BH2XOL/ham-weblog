@@ -1,142 +1,21 @@
 import type { Bindings } from "../types";
 import { esc } from "../lib/html";
 import { styles } from "../styles";
-import { verifySession, createSessionCookie, verifyPassword } from "../lib/auth";
-import { initSchema, countRecentLoginFailures, recordLoginAttempt } from "../lib/db";
+import { initSchema } from "../lib/db";
 
 export async function adminHandler(
-  request: Request,
+  _request: Request,
   env: Bindings
 ): Promise<Response> {
   await initSchema(env.DB);
-
-  const url = new URL(request.url);
-  const callsign = env.CALLSIGN;
-  const securityHeaders: Record<string, string> = {
-    "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
-    "Referrer-Policy": "strict-origin-when-cross-origin",
-  };
-
-  if (url.pathname === "/admin/login" && request.method === "POST") {
-    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-
-    const recentFails = await countRecentLoginFailures(env.DB, ip);
-    if (recentFails >= 5) {
-      return new Response(renderLogin(callsign, "尝试次数过多，请15分钟后再试"), {
-        headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
-        status: 429,
-      });
-    }
-
-    const body = (await request.json()) as { email: string; password: string };
-    const ok = await verifyPassword(env, body.email || "", body.password || "");
-    await recordLoginAttempt(env.DB, ip, ok);
-
-    if (!ok) {
-      return new Response(renderLogin(callsign, "邮箱或密码错误"), {
-        headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
-        status: 401,
-      });
-    }
-    const cookie = await createSessionCookie(env, body.email);
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: "/admin",
-        "Set-Cookie": cookie,
-      },
-    });
-  }
-
-  const login = await verifySession(request, env);
-  if (!login) {
-    return new Response(renderLogin(callsign), {
-      headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
-    });
-  }
-
-  return new Response(renderAdmin(callsign), {
-    headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8" },
+  return new Response(renderAdmin(env.CALLSIGN), {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    },
   });
-}
-
-export async function logoutHandler(): Promise<Response> {
-  return new Response(null, {
-    status: 302,
-    headers: { Location: "/admin", "Set-Cookie": "session=; Path=/admin; HttpOnly; SameSite=Lax; Max-Age=0" },
-  });
-}
-
-function renderLogin(callsign: string, error?: string): string {
-  const errHTML = error ? `<p style="color:var(--danger);font-size:0.82rem;margin-bottom:1rem;">${esc(error)}</p>` : "";
-  return `<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>登录 · ${esc(callsign)} 管理</title>
-  <script>
-    (function() {
-      var saved = localStorage.getItem('theme');
-      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme:dark)').matches)) {
-        document.documentElement.setAttribute('data-theme','dark');
-      }
-    })();
-  </script>
-  <style>${styles}
-    body { display:flex; align-items:center; justify-content:center; }
-    body::before { opacity:0.15; }
-    .login-card {
-      background:var(--card-bg); border:1px solid var(--card-border);
-      border-radius:var(--radius); padding:2.5rem 2rem; box-shadow:var(--card-shadow);
-      text-align:center; max-width:380px; width:100%; position:relative; z-index:1;
-      backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
-      transition: background-color 0.4s, border-color 0.4s, box-shadow 0.4s;
-    }
-    .login-card h1 { font-size:1.25rem; color:var(--text-heading); margin-bottom:0.5rem; }
-    .login-card p { color:var(--muted); font-size:0.85rem; margin-bottom:1.5rem; }
-    .field { margin-bottom:1rem; text-align:left; }
-    .field label { display:block; font-size:0.75rem; color:var(--muted); margin-bottom:0.3rem; font-weight:500; }
-    .field input {
-      width:100%; height:2.5rem; padding:0 0.75rem; font-size:0.9rem; font-family:inherit;
-      background:var(--input-bg); border:1px solid var(--input-border); border-radius:8px;
-      color:var(--text); outline:none; transition: border-color 0.25s, box-shadow 0.25s;
-    }
-    .field input:focus { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
-    .login-btn {
-      width:100%; height:2.5rem; font-size:0.9rem; font-weight:500; font-family:inherit;
-      background:var(--accent); color:#fff; border:none; border-radius:8px; cursor:pointer;
-      transition: opacity 0.2s;
-    }
-    .login-btn:hover { opacity:0.88; }
-  </style>
-</head>
-<body>
-  <div class="login-card">
-    <h1>${esc(callsign)} 日志管理</h1>
-    <p>管理员登录</p>
-    ${errHTML}
-    <form id="loginForm" onsubmit="login(event)">
-      <div class="field"><label>邮箱</label><input type="email" id="email" required></div>
-      <div class="field"><label>密码</label><input type="password" id="password" required></div>
-      <button type="submit" class="login-btn">登录</button>
-    </form>
-  </div>
-  <script>
-    async function login(e) {
-      e.preventDefault();
-      var resp = await fetch('/admin/login', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})
-      });
-      if (resp.ok) { window.location.href='/admin'; }
-      else { var t = await resp.text(); document.body.innerHTML = t; }
-    }
-  </script>
-</body>
-</html>`;
 }
 
 function renderAdmin(callsign: string): string {
@@ -155,13 +34,6 @@ function renderAdmin(callsign: string): string {
     })();
   </script>
   <style>${styles}
-    .logout-btn {
-      height:2rem; padding:0 0.8rem; font-size:0.78rem;
-      background:var(--btn-bg); color:var(--text);
-      border:1px solid var(--card-border); border-radius:8px; cursor:pointer;
-      font-family:inherit; transition: background-color 0.25s;
-    }
-    .logout-btn:hover { background:var(--btn-bg-hover); }
     .card {
       background:var(--card-bg); border:1px solid var(--card-border);
       border-radius:var(--radius); padding:1.25rem; margin-bottom:1rem;
@@ -216,13 +88,12 @@ function renderAdmin(callsign: string): string {
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
           </svg>
         </button>
-        <button class="logout-btn" onclick="window.location.href='/admin/logout'">退出</button>
       </nav>
     </div>
   </header>
   <main class="main">
     <h1 class="page-title">日志管理</h1>
-    <p class="page-subtitle">上传 ADIF · 手动添加 · 删除 · 设置</p>
+    <p class="page-subtitle">上传 ADIF · 手动添加 · 删除 · 设置 · 认证由 Cloudflare Access 保护</p>
     <div class="card">
       <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
         <span>📤 上传 ADIF</span>

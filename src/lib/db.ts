@@ -55,26 +55,7 @@ export function initSchema(db: D1Database) {
         last_activity TEXT DEFAULT ''
       )
     `),
-    db.prepare(`
-      CREATE TABLE IF NOT EXISTS login_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        ip TEXT NOT NULL,
-        success INTEGER NOT NULL DEFAULT 0,
-        attempted_at TEXT DEFAULT (datetime('now'))
-      )
-    `),
   ]);
-}
-
-export async function countRecentLoginFailures(db: D1Database, ip: string): Promise<number> {
-  const row = await db.prepare(
-    "SELECT COUNT(*) as cnt FROM login_attempts WHERE ip = ? AND success = 0 AND attempted_at > datetime('now', '-15 minutes')"
-  ).bind(ip).first<{ cnt: number }>();
-  return row?.cnt ?? 0;
-}
-
-export async function recordLoginAttempt(db: D1Database, ip: string, success: boolean) {
-  await db.prepare("INSERT INTO login_attempts (ip, success) VALUES (?, ?)").bind(ip, success ? 1 : 0).run();
 }
 
 export function countQsos(db: D1Database, filters?: Record<string, string | undefined>) {

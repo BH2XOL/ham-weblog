@@ -33,6 +33,3 @@ jobs:
             printf '%s' "${{ secrets.BLOG_URL }}" | npx wrangler secret put BLOG_URL
             printf '%s' "${{ secrets.QRZ_URL }}" | npx wrangler secret put QRZ_URL
             printf '%s' "${{ secrets.MY_GRIDS }}" | npx wrangler secret put MY_GRIDS
-            printf '%s' "${{ secrets.ADMIN_EMAIL }}" | npx wrangler secret put ADMIN_EMAIL
-            printf '%s' "${{ secrets.ADMIN_PASSWORD_HASH }}" | npx wrangler secret put ADMIN_PASSWORD_HASH
-            printf '%s' "${{ secrets.SESSION_SECRET }}" | npx wrangler secret put SESSION_SECRET

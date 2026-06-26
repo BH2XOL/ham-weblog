@@ -29,8 +29,5 @@ export interface EnvVars {
 
 export type Bindings = {
   DB: D1Database;
-  ADMIN_EMAIL: string;
-  ADMIN_PASSWORD_HASH: string;
-  SESSION_SECRET: string;
   DOMAIN: string;
 } & EnvVars;
